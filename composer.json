@@ -1,5 +1,5 @@
 {
-  "name": "oxid-esales/eshop-virtual_namespace_generator",
+  "name": "oxid-esales/eshop-virtual-namespace-generator",
   "description": "OXID eShop virtual namespace generator",
   "license": "GPL-3.0",
   "require-dev": {
