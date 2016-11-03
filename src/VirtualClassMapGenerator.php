@@ -20,11 +20,9 @@
  * @version       OXID eShop CE
  */
 
-namespace OxidEsales\Eshop;
-
-use Exception;
 use Fhaculty\Graph\Graph;
 use Fhaculty\Graph\Vertex;
+use OxidEsales\Eshop\Exception;
 use OxidEsales\Eshop\Core\Registry;
 
 class VirtualClassMapGenerator
@@ -336,7 +334,7 @@ class VirtualClassMapGenerator
 
         return $namespace;
     }
-    
+
     /**
      * Extract the class name out of a given grep line.
      *
