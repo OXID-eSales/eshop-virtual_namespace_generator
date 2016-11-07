@@ -2,7 +2,7 @@
   "name": "oxid-esales/eshop-virtual-namespace-generator",
   "description": "OXID eShop virtual namespace generator",
   "license": "GPL-3.0",
-  "require-dev": {
+  "require": {
     "clue/graph": "~0.9.0"
   },
   "bin": [
