@@ -22,8 +22,6 @@
 
 use Fhaculty\Graph\Graph;
 use Fhaculty\Graph\Vertex;
-use OxidEsales\Eshop\Exception;
-use OxidEsales\Eshop\Core\Registry;
 
 class VirtualClassMapGenerator
 {
@@ -44,6 +42,11 @@ class VirtualClassMapGenerator
     const ATTRIBUTE_NAME_EXTENDS = 'fullextendsname';
 
     /**
+     * @var string Is true, if the class is extended by a eShop Edition, else false.
+     */
+    const ATTRIBUTE_NAME_EXTENDED = 'isextendedclass';
+
+    /**
      * @var string The key for the attribute, if the node is a leave (classes marked with internal are no leave).
      */
     const ATTRIBUTE_NAME_LEAVE = 'isleave';
@@ -53,7 +56,7 @@ class VirtualClassMapGenerator
      */
     public function generateAll()
     {
-        $baseDir = Registry::getConfig()->getConfigParam('sShopDir');
+        $baseDir = getShopBasePath();
 
         $communitySourcePath = $baseDir . '';
         $professionalSourcePath = $baseDir . '/../vendor/oxid-esales/oxideshop-pe';
@@ -85,11 +88,16 @@ class VirtualClassMapGenerator
 
         $arrayContent = "";
         foreach ($graph->getVertices() as $vertex) {
-            $classNameEdition = $this->createExtendsClassName($edition, $vertex);
-            $className = $this->createClassName($vertex);
+            if (true === $vertex->getAttribute(self::ATTRIBUTE_NAME_LEAVE)
+                ||
+                true === $vertex->getAttribute(self::ATTRIBUTE_NAME_EXTENDED)
+            ) {
+                $classNameEdition = $this->createExtendsClassName($edition, $vertex);
+                $className = $this->createClassName($vertex);
 
-            if ($this->shouldIncludeInGeneration($className)) {
-                $arrayContent .= "\t\t\t'$className' => '$classNameEdition',\n";
+                if ($this->shouldIncludeInGeneration($className)) {
+                    $arrayContent .= "\t\t\t'$className' => \\$classNameEdition::class,\n";
+                }
             }
         }
 
@@ -131,16 +139,19 @@ class VirtualClassMapGenerator
     public function createNodes($path, $edition = 'Community')
     {
         $classes = $this->getClasses($path);
+        sort($classes);
         $graph = new Graph();
 
         foreach ($classes as $class) {
+            $virtualClassName = str_replace('OxidEsales\Eshop' . $edition, 'OxidEsales\Eshop', $class[self::ATTRIBUTE_NAME_CLASS]);
             try {
-                $virtualClassName = str_replace('OxidEsales\Eshop' . $edition, 'OxidEsales\Eshop', $class[self::ATTRIBUTE_NAME_CLASS]);
-
                 $vertex = $graph->createVertex($virtualClassName);
                 $vertex->setAttribute(self::ATTRIBUTE_NAME_EXTENDS, $class[self::ATTRIBUTE_NAME_EXTENDS]);
                 $vertex->setAttribute(self::ATTRIBUTE_NAME_FILE, $class[self::ATTRIBUTE_NAME_FILE]);
-            } catch (Exception $exception) {
+                $vertex->setAttribute(self::ATTRIBUTE_NAME_EXTENDED, $this->isExtendedClass($virtualClassName, $edition));
+            } catch (Fhaculty\Graph\Exception\OverflowException $exception) {
+                $message = $exception->getMessage() . ' : ' . $virtualClassName;
+                $code = $exception->getCode();
                 //@todo: handle exception - not sure, what to do
             }
         }
@@ -180,7 +191,8 @@ class VirtualClassMapGenerator
     /**
      * Mark all leaves (normal leaves, which are not marked as @internal) of the given graph.
      *
-     * @param Graph $graph The inheritance graph, with all edges.
+     * @param Graph  $graph The inheritance graph, with all edges.
+     * @param string $sourcePath
      *
      * @return Graph The graph with the leaves marked as needed.
      */
@@ -248,7 +260,7 @@ class VirtualClassMapGenerator
             return $classes;
         }
 
-        $command = "grep -Pr '^(abstract )?class .*(( extends)|( implements))?' " . $path;
+        $command = "grep -Pr '^(abstract )?(class|interface) .*(( extends)|( implements))?' --exclude-dir=\"modules\"  --exclude-dir=\"Setup\"  --exclude-dir=\"migration\" " . $path;
         $output = shell_exec($command);
 
         $classes = $this->addFilesToResult($output, $classes, true);
@@ -286,8 +298,8 @@ class VirtualClassMapGenerator
                 $fullExtendsName = $this->combineFullExtendsName($namespace, $classExtendsName);
 
                 $result[] = array(
-                    self::ATTRIBUTE_NAME_FILE => $fileName,
-                    self::ATTRIBUTE_NAME_CLASS => $fullClassName,
+                    self::ATTRIBUTE_NAME_FILE    => $fileName,
+                    self::ATTRIBUTE_NAME_CLASS   => $fullClassName,
                     self::ATTRIBUTE_NAME_EXTENDS => $fullExtendsName
                 );
             } else {
@@ -316,7 +328,7 @@ class VirtualClassMapGenerator
 
         foreach ($lines as $line) {
             if ($found) {
-                continue;
+                break;
             }
             if ('namespace' === substr($line, 0, 9)) {
                 $line = str_replace('namespace', '', $line);
@@ -328,9 +340,9 @@ class VirtualClassMapGenerator
             }
         }
 
-        if ('\\' !== $namespace[0]) {
-            $namespace = '\\' . $namespace;
-        }
+        /** Strip left hand side backslash to avoid double backslash, when added below */
+        $namespace = ltrim($namespace, '\\');
+        $namespace = '\\' . $namespace;
 
         return $namespace;
     }
@@ -359,13 +371,17 @@ class VirtualClassMapGenerator
      */
     protected function extractExtendsClassName($line)
     {
+        $extends = null;
+
         $parts = explode(' extends ', $line);
 
-        $extends = str_replace(';', '', $parts[1]);
+        if (isset($parts[1])) {
+            $extends = str_replace(';', '', $parts[1]);
 
-        if (0 <= strpos($extends, ' implements ')) {
-            $parts = explode(' implements ', $extends);
-            $extends = $parts[0];
+            if (0 <= strpos($extends, ' implements ')) {
+                $parts = explode(' implements ', $extends);
+                $extends = $parts[0];
+            }
         }
 
         return $extends;
@@ -473,7 +489,384 @@ class VirtualClassMapGenerator
         $posTestNamespace = strpos($className, 'OxidEsales\Eshop\Tests\\');
         $isNoTest = (false === $posTestNamespace);
         $hasNamespace = (false !== strpos($className, "\\"));
+        $isException = (false !== strpos($className, 'OxidEsales\Eshop\Core\Exception\\'));
 
-        return $isNoTest && $hasNamespace;
+        return $isNoTest && $hasNamespace && !$isException;
+    }
+
+
+    /**
+     * Return true, if the current class in the current edition is extended by a class in a child edition.
+     * E.g. a CE class, which is extended by a PE class or a PE class, which is extended by a EE class.
+     *
+     * @param string $className A class name from the virtual namespace like \OxidEsales\Eshop\Application\Model\Article
+     * @param string $edition   The current edition
+     *
+     * @return bool
+     */
+    protected function isExtendedClass($className, $edition)
+    {
+        $isExtendedClass = false;
+        $extendedClasses = [];
+
+        $search = 'OxidEsales\\Eshop\\';
+        $replacement = '';
+        $className = trim(str_replace($search, $replacement, $className), '\\');
+
+        if ($edition == 'Community') {
+            $extendedClasses = $this->getClassesExtendedByProfessionalEdition();
+        } elseif ($edition == 'Professional') {
+            $extendedClasses = $this->getClassesExtendedByEnterpriseEdition();
+        }
+        if (in_array($className, $extendedClasses)) {
+            $isExtendedClass = true;
+        }
+
+        return $isExtendedClass;
+    }
+
+    /**
+     * Array generated manually by
+     * cd <PROFESSIONAL_EDITION_DIRECTORY> && grep -Pr 'extends \\OxidEsales\\EshopEnterprise' --exclude-dir='Tests' --exclude-dir='Setup' --exclude='ClassMap\.php' | awk '{print "\""$4"\","}' | sort -u
+     *
+     * @return array
+     */
+    protected function getClassesExtendedByProfessionalEdition()
+    {
+        return [
+            'Application\Component\BasketComponent',
+            'Application\Component\UserComponent',
+            'Application\Component\Widget\ArticleBox',
+            'Application\Component\Widget\ArticleDetails',
+            'Application\Component\Widget\MiniBasket',
+            'Application\Component\Widget\Rating',
+            'Application\Component\Widget\Review',
+            'Application\Component\Widget\ServiceMenu',
+            'Application\Controller\AccountController',
+            'Application\Controller\AccountNoticeListController',
+            'Application\Controller\Admin\ActionsArticleAjax',
+            'Application\Controller\Admin\ActionsGroupsAjax',
+            'Application\Controller\Admin\ActionsList',
+            'Application\Controller\Admin\ActionsMain',
+            'Application\Controller\Admin\ActionsMainAjax',
+            'Application\Controller\Admin\ActionsOrderAjax',
+            'Application\Controller\Admin\AdminController',
+            'Application\Controller\Admin\AdminDetailsController',
+            'Application\Controller\Admin\AdminListController',
+            'Application\Controller\Admin\ArticleAccessoriesAjax',
+            'Application\Controller\Admin\ArticleAttributeAjax',
+            'Application\Controller\Admin\ArticleCrosssellingAjax',
+            'Application\Controller\Admin\ArticleExtend',
+            'Application\Controller\Admin\ArticleExtendAjax',
+            'Application\Controller\Admin\ArticleList',
+            'Application\Controller\Admin\ArticleMain',
+            'Application\Controller\Admin\ArticleOverview',
+            'Application\Controller\Admin\ArticlePictures',
+            'Application\Controller\Admin\ArticleSelectionAjax',
+            'Application\Controller\Admin\ArticleStock',
+            'Application\Controller\Admin\AttributeCategoryAjax',
+            'Application\Controller\Admin\AttributeMainAjax',
+            'Application\Controller\Admin\AttributeOrderAjax',
+            'Application\Controller\Admin\CategoryMain',
+            'Application\Controller\Admin\CategoryMainAjax',
+            'Application\Controller\Admin\CategoryOrderAjax',
+            'Application\Controller\Admin\ContentList',
+            'Application\Controller\Admin\CountryList',
+            'Application\Controller\Admin\CountryMain',
+            'Application\Controller\Admin\DiscountArticlesAjax',
+            'Application\Controller\Admin\DiscountCategoriesAjax',
+            'Application\Controller\Admin\DiscountGroupsAjax',
+            'Application\Controller\Admin\DiscountMainAjax',
+            'Application\Controller\Admin\DiscountUsersAjax',
+            'Application\Controller\Admin\DynamicExportBaseController',
+            'Application\Controller\Admin\LanguageList',
+            'Application\Controller\Admin\LanguageMain',
+            'Application\Controller\Admin\ListComponentAjax',
+            'Application\Controller\Admin\LoginController',
+            'Application\Controller\Admin\ManufacturerMainAjax',
+            'Application\Controller\Admin\ModuleConfiguration',
+            'Application\Controller\Admin\ModuleSortList',
+            'Application\Controller\Admin\NavigationController',
+            'Application\Controller\Admin\NavigationTree',
+            'Application\Controller\Admin\NewsMainAjax',
+            'Application\Controller\Admin\OrderList',
+            'Application\Controller\Admin\OrderMain',
+            'Application\Controller\Admin\PaymentMain',
+            'Application\Controller\Admin\PriceAlarmList',
+            'Application\Controller\Admin\PriceAlarmMain',
+            'Application\Controller\Admin\SelectListMainAjax',
+            'Application\Controller\Admin\ShopConfiguration',
+            'Application\Controller\Admin\ShopController',
+            'Application\Controller\Admin\ShopList',
+            'Application\Controller\Admin\ShopMain',
+            'Application\Controller\Admin\ShopSeo',
+            'Application\Controller\Admin\SystemInfoController',
+            'Application\Controller\Admin\UserGroupList',
+            'Application\Controller\Admin\UserGroupMain',
+            'Application\Controller\Admin\UserList',
+            'Application\Controller\Admin\UserMain',
+            'Application\Controller\Admin\VendorMainAjax',
+            'Application\Controller\ArticleDetailsController',
+            'Application\Controller\ArticleListController',
+            'Application\Controller\BasketController',
+            'Application\Controller\ClearCookiesController',
+            'Application\Controller\CompareController',
+            'Application\Controller\FrontendController',
+            'Application\Controller\OrderController',
+            'Application\Controller\OxidStartController',
+            'Application\Controller\PaymentController',
+            'Application\Controller\RecommListController',
+            'Application\Controller\RssController',
+            'Application\Controller\SearchController',
+            'Application\Controller\StartController',
+            'Application\Controller\ThankYouController',
+            'Application\Controller\UserController',
+            'Application\Controller\WishListController',
+            'Application\Controller\WrappingController',
+            'Application\Model\Actions',
+            'Application\Model\AmountPriceList',
+            'Application\Model\Article',
+            'Application\Model\ArticleList',
+            'Application\Model\Attribute',
+            'Application\Model\BasketItem',
+            'Application\Model\Category',
+            'Application\Model\CategoryList',
+            'Application\Model\Content',
+            'Application\Model\ContentList',
+            'Application\Model\Contract\ArticleInterface',
+            'Application\Model\Contract\CacheConnectorInterface',
+            'Application\Model\Country',
+            'Application\Model\Delivery',
+            'Application\Model\DeliverySet',
+            'Application\Model\Discount',
+            'Application\Model\Groups',
+            'Application\Model\Links',
+            'Application\Model\Manufacturer',
+            'Application\Model\MediaUrl',
+            'Application\Model\News',
+            'Application\Model\NewsSubscribed',
+            'Application\Model\Object2Category',
+            'Application\Model\Order',
+            'Application\Model\OrderArticle',
+            'Application\Model\Rating',
+            'Application\Model\RecommendationList',
+            'Application\Model\Review',
+            'Application\Model\SelectList',
+            'Application\Model\Shop',
+            'Application\Model\ShopList',
+            'Application\Model\ShopViewValidator',
+            'Application\Model\SimpleVariant',
+            'Application\Model\User',
+            'Application\Model\Vendor',
+            'Application\Model\VoucherSerie',
+            'Core\AdminLogSqlDecorator',
+            'Core\Base',
+            'Core\Config',
+            'Core\Controller\BaseController',
+            'Core\Database\Adapter\Doctrine\Database',
+            'Core\DatabaseProvider',
+            'Core\DbMetaDataHandler',
+            'Core\DebugInfo',
+            'Core\Edition\ClassMap',
+            'Core\GenericImport\GenericImport',
+            'Core\GenericImport\ImportObject\Article',
+            'Core\GenericImport\ImportObject\Article2Category',
+            'Core\GenericImport\ImportObject\OrderArticle',
+            'Core\GenericImport\ImportObject\User',
+            'Core\Header',
+            'Core\Language',
+            'Core\Model\BaseModel',
+            'Core\Model\MultiLanguageModel',
+            'Core\ModuleCache',
+            'Core\ModuleInstaller',
+            'Core\OnlineLicenseCheck',
+            'Core\Output',
+            'Core\Session',
+            'Core\ShopControl',
+            'Core\ShopIdCalculator',
+            'Core\SystemEventHandler',
+            'Core\SystemRequirements',
+            'Core\TableViewNameGenerator',
+            'Core\Utils',
+            'Core\UtilsCount',
+            'Core\UtilsObject',
+            'Core\UtilsUrl',
+            'Core\UtilsView',
+            'Core\ViewConfig',
+            'Core\ViewHelper\JavaScriptRenderer',
+            'Core\ViewHelper\StyleRenderer',
+            'Core\WidgetControl',
+        ];
+    }
+
+    /**
+     * Array generated manually by
+     * cd <ENTERPRISE_EDITION_DIRECTORY> && grep -Pr 'extends \\OxidEsales\\EshopProfessional' --exclude-dir='Tests' --exclude-dir='Setup' --exclude='ClassMap\.php' | awk '{print "\""$4"\","}' | sort -u
+     *
+     * @return array
+     */
+    protected function getClassesExtendedByEnterpriseEdition()
+    {
+        return [
+            'Application\Component\BasketComponent',
+            'Application\Component\UserComponent',
+            'Application\Component\Widget\ArticleBox',
+            'Application\Component\Widget\ArticleDetails',
+            'Application\Component\Widget\MiniBasket',
+            'Application\Component\Widget\Rating',
+            'Application\Component\Widget\Review',
+            'Application\Component\Widget\ServiceMenu',
+            'Application\Controller\AccountController',
+            'Application\Controller\AccountNoticeListController',
+            'Application\Controller\Admin\ActionsArticleAjax',
+            'Application\Controller\Admin\ActionsGroupsAjax',
+            'Application\Controller\Admin\ActionsList',
+            'Application\Controller\Admin\ActionsMain',
+            'Application\Controller\Admin\ActionsMainAjax',
+            'Application\Controller\Admin\ActionsOrderAjax',
+            'Application\Controller\Admin\AdminController',
+            'Application\Controller\Admin\AdminDetailsController',
+            'Application\Controller\Admin\AdminListController',
+            'Application\Controller\Admin\AdminView',
+            'Application\Controller\Admin\ArticleAccessoriesAjax',
+            'Application\Controller\Admin\ArticleAttributeAjax',
+            'Application\Controller\Admin\ArticleCrossSellingAjax',
+            'Application\Controller\Admin\ArticleExtend',
+            'Application\Controller\Admin\ArticleExtendAjax',
+            'Application\Controller\Admin\ArticleList',
+            'Application\Controller\Admin\ArticleMain',
+            'Application\Controller\Admin\ArticleOverview',
+            'Application\Controller\Admin\ArticlePictures',
+            'Application\Controller\Admin\ArticleSelectionAjax',
+            'Application\Controller\Admin\ArticleStock',
+            'Application\Controller\Admin\AttributeCategoryAjax',
+            'Application\Controller\Admin\AttributeMainAjax',
+            'Application\Controller\Admin\AttributeOrderAjax',
+            'Application\Controller\Admin\CategoryMain',
+            'Application\Controller\Admin\CategoryMainAjax',
+            'Application\Controller\Admin\CategoryOrderAjax',
+            'Application\Controller\Admin\ContentList',
+            'Application\Controller\Admin\CountryList',
+            'Application\Controller\Admin\CountryMain',
+            'Application\Controller\Admin\DiscountArticlesAjax',
+            'Application\Controller\Admin\DiscountCategoriesAjax',
+            'Application\Controller\Admin\DiscountGroupsAjax',
+            'Application\Controller\Admin\DiscountMainAjax',
+            'Application\Controller\Admin\DiscountUsersAjax',
+            'Application\Controller\Admin\DynamicExportBaseController',
+            'Application\Controller\Admin\LanguageList',
+            'Application\Controller\Admin\LanguageMain',
+            'Application\Controller\Admin\ListComponentAjax',
+            'Application\Controller\Admin\Login',
+            'Application\Controller\Admin\ManufacturerMainAjax',
+            'Application\Controller\Admin\ModuleConfiguration',
+            'Application\Controller\Admin\ModuleSortList',
+            'Application\Controller\Admin\NavigationController',
+            'Application\Controller\Admin\NavigationTree',
+            'Application\Controller\Admin\NewsMainAjax',
+            'Application\Controller\Admin\OrderList',
+            'Application\Controller\Admin\OrderMain',
+            'Application\Controller\Admin\PaymentMain',
+            'Application\Controller\Admin\PriceAlarmMain',
+            'Application\Controller\Admin\SelectListMainAjax',
+            'Application\Controller\Admin\ShopConfiguration',
+            'Application\Controller\Admin\ShopController',
+            'Application\Controller\Admin\ShopLicense',
+            'Application\Controller\Admin\ShopList',
+            'Application\Controller\Admin\ShopMain',
+            'Application\Controller\Admin\ShopSeo',
+            'Application\Controller\Admin\SystemInfoController',
+            'Application\Controller\Admin\UserGroupList',
+            'Application\Controller\Admin\UserGroupMain',
+            'Application\Controller\Admin\UserList',
+            'Application\Controller\Admin\UserMain',
+            'Application\Controller\Admin\VendorMainAjax',
+            'Application\Controller\ArticleDetailsController',
+            'Application\Controller\ArticleListController',
+            'Application\Controller\BasketController',
+            'Application\Controller\ClearCookiesController',
+            'Application\Controller\CompareController',
+            'Application\Controller\FrontendController',
+            'Application\Controller\OrderController',
+            'Application\Controller\PaymentController',
+            'Application\Controller\RecommListController',
+            'Application\Controller\RssController',
+            'Application\Controller\SearchController',
+            'Application\Controller\StartController',
+            'Application\Controller\ThankYouController',
+            'Application\Controller\UserController',
+            'Application\Controller\WishListController',
+            'Application\Controller\WrappingController',
+            'Application\Model\Actions',
+            'Application\Model\AmountPriceList',
+            'Application\Model\Article',
+            'Application\Model\ArticleList',
+            'Application\Model\Attribute',
+            'Application\Model\BasketItem',
+            'Application\Model\CategoryList',
+            'Application\Model\Content',
+            'Application\Model\ContentList',
+            'Application\Model\Contract\ArticleInterface',
+            'Application\Model\Contract\CacheConnectorInterface',
+            'Application\Model\Country',
+            'Application\Model\Delivery',
+            'Application\Model\DeliverySet',
+            'Application\Model\Discount',
+            'Application\Model\Groups',
+            'Application\Model\Links',
+            'Application\Model\Manufacturer',
+            'Application\Model\MediaUrl',
+            'Application\Model\News',
+            'Application\Model\NewsSubscribed',
+            'Application\Model\Object2Category',
+            'Application\Model\Order',
+            'Application\Model\OrderArticle',
+            'Application\Model\Rating',
+            'Application\Model\RecommendationList',
+            'Application\Model\Review',
+            'Application\Model\SelectList',
+            'Application\Model\Shop',
+            'Application\Model\ShopList',
+            'Application\Model\ShopViewValidator',
+            'Application\Model\SimpleVariant',
+            'Application\Model\User',
+            'Application\Model\Vendor',
+            'Application\Model\VoucherSerie',
+            'Core\AdminLogSqlDecorator',
+            'Core\Base',
+            'Core\Config',
+            'Core\Controller\BaseController',
+            'Core\Database\Adapter\Doctrine\Database',
+            'Core\DatabaseProvider',
+            'Core\DbMetaDataHandler',
+            'Core\DebugInfo',
+            'Core\GenericImport\GenericImport',
+            'Core\GenericImport\ImportObject\Article',
+            'Core\GenericImport\ImportObject\Article2Category',
+            'Core\GenericImport\ImportObject\OrderArticle',
+            'Core\GenericImport\ImportObject\User',
+            'Core\Header',
+            'Core\Language',
+            'Core\Model\BaseModel',
+            'Core\Model\MultiLanguageModel',
+            'Core\Module\ModuleCache',
+            'Core\Module\ModuleInstaller',
+            'Core\Output',
+            'Core\Serial',
+            'Core\Session',
+            'Core\ShopControl',
+            'Core\ShopIdCalculator',
+            'Core\SystemRequirements',
+            'Core\TableViewNameGenerator',
+            'Core\Utils',
+            'Core\UtilsCount',
+            'Core\UtilsObject',
+            'Core\UtilsUrl',
+            'Core\UtilsView',
+            'Core\ViewConfig',
+            'Core\ViewHelper\JavaScriptRenderer',
+            'Core\ViewHelper\StyleRenderer',
+            'Core\WidgetControl',
+        ];
     }
 }
