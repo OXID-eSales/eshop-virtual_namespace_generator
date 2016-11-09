@@ -16,7 +16,7 @@ class VirtualNameSpaceClassMap extends \OxidEsales\EshopCommunity\Core\Edition\C
     /**
      * Return mapping of classes from the virtual namespace to concrete classes.
      *
-     * @return array Maps a class from the virtual namespace to a concrete class
+     * @return array Map of classes in the virtual namespace to concrete classes
      */
     public function getOverridableMap()
     {

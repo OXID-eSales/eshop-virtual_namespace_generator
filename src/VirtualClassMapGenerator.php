@@ -66,7 +66,7 @@ class VirtualClassMapGenerator
         $professionalGeneratedFile = $baseDir . '/../vendor/oxid-esales/oxideshop-pe/Core/VirtualNameSpaceClassMap.php';
         $enterpriseGeneratedFile = $baseDir . '/../vendor/oxid-esales/oxideshop-ee/Core/VirtualNameSpaceClassMap.php';
 
-        $this->generate($communitySourcePath, $communityGeneratedFile);
+        $this->generate($communitySourcePath, $communityGeneratedFile, 'Community');
         $this->generate($professionalSourcePath, $professionalGeneratedFile, 'Professional');
         $this->generate($enterpriseSourcePath, $enterpriseGeneratedFile, 'Enterprise');
     }
@@ -76,9 +76,46 @@ class VirtualClassMapGenerator
      *
      * @param string $sourcePath        The source directory, which should be reflected to the virtual class map.
      * @param string $generatedFileName The name of the file, in which we want to write the virtual class map.
+     * @param string $edition
+     *
+     * @throws Exception
      */
-    public function generate($sourcePath, $generatedFileName, $edition = 'Community')
+    public function generate($sourcePath, $generatedFileName, $edition)
     {
+        $tabs = '    ';
+        /** Collect classes, that define namespaces */
+        $iterator = $this->getDirectoryIterator($sourcePath, $edition);
+        $classes = $this->getNameSpacedClasses($iterator);
+        sort($classes);
+
+        $overridableMap = '';
+        foreach ($classes as $class) {
+            $classInVirtualNamespace = ltrim(str_replace('Eshop' . $edition, 'Eshop', $class), '\\');
+            $overridableMap .= "$tabs$tabs$tabs'$classInVirtualNamespace' => $class::class," . PHP_EOL;
+        }
+
+        $license = file_get_contents(__DIR__ . "/../templates/license/$edition.php");
+        $template = file_get_contents(__DIR__ . '/../templates/VirtualNamespaceTemplate.php');
+
+        $content = str_replace('/* ADD_OVERRIDABLE_MAP_HERE */', $overridableMap, $template);
+        $content = str_replace('/* ADD_LICENSE_HERE */', $license, $content);
+        $content = str_replace('/* ADD_EDITION_HERE */', $edition, $content);
+
+        if (!file_put_contents($generatedFileName, $content)) {
+            throw new \Exception('Could not write content to file ' . $generatedFileName);
+        };
+    }
+
+    /**
+     * Generate the virtual class map for the given source folder in the given file name.
+     *
+     * @param string $sourcePath        The source directory, which should be reflected to the virtual class map.
+     * @param string $generatedFileName The name of the file, in which we want to write the virtual class map.
+     * @param string $edition
+     */
+    public function _generate($sourcePath, $generatedFileName, $edition)
+    {
+        $listAllClasses = true;
         $graph = $this->createGraph($sourcePath, $edition);
 
         if (file_exists($generatedFileName)) {
@@ -88,9 +125,9 @@ class VirtualClassMapGenerator
 
         $arrayContent = "";
         foreach ($graph->getVertices() as $vertex) {
-            if (true === $vertex->getAttribute(self::ATTRIBUTE_NAME_LEAVE)
-                ||
-                true === $vertex->getAttribute(self::ATTRIBUTE_NAME_EXTENDED)
+            if ($listAllClasses
+                || $vertex->getAttribute(self::ATTRIBUTE_NAME_LEAVE, false)
+                || $vertex->getAttribute(self::ATTRIBUTE_NAME_EXTENDED, false)
             ) {
                 $classNameEdition = $this->createExtendsClassName($edition, $vertex);
                 $className = $this->createClassName($vertex);
@@ -868,5 +905,155 @@ class VirtualClassMapGenerator
             'Core\ViewHelper\StyleRenderer',
             'Core\WidgetControl',
         ];
+    }
+
+    /**
+     * @param SplFileInfo|RecursiveIteratorIterator|RecursiveDirectoryIterator $iterator
+     *
+     * @return array
+     */
+    protected function getNameSpacedClasses(RecursiveIteratorIterator $iterator)
+    {
+        $namespaceClasses = [];
+        while ($iterator->valid()) {
+            if (!$iterator->isDot()) {
+                $fileContent = file($iterator->key(), FILE_SKIP_EMPTY_LINES);
+                $matches = preg_grep("/^([[:space:]])?namespace([[:space:]])+\\OxidEsales/i", $fileContent);
+                if ($matches && $match = reset($matches)) {
+                    $search = ['namespace', ';', '{'];
+                    $replace = ['', '', ''];
+                    $namespace = trim(str_replace($search, $replace, $match));
+                    $namespaceClasses[] = '\\' . $namespace . '\\' . $iterator->getBasename('.php');
+                }
+            }
+
+            $iterator->next();
+        }
+
+        return $namespaceClasses;
+    }
+
+    /**
+     * @param $sourcePath
+     *
+     * @return RecursiveIteratorIterator|SplFileInfo
+     */
+    protected function getDirectoryIterator($sourcePath, $edition)
+    {
+        $filter = $edition == 'Community' ? [$this, 'getFilterCommunity'] :  [$this, 'getFilterProfessional'];
+
+        $directory = new \RecursiveDirectoryIterator($sourcePath);
+        $filter = new \RecursiveCallbackFilterIterator(
+            $directory, $filter
+        );
+
+
+        /** @var SplFileInfo $iterator */
+        $iterator = new \RecursiveIteratorIterator($filter);
+        $iterator->rewind();
+
+        return $iterator;
+    }
+
+    /**
+     * @return
+     */
+    public function getFilterCommunity(SplFileInfo $current, $key, $iterator)
+    {
+            /**
+             * In- and exclude directories to search in.
+             * The order is include -> exclude. So you can include a directory, which automatically  includes all
+             * subdirectories and then exclude certain included subdirectories
+             */
+            /** @var array $includedDirectories Directories and its subdirectories, which are included in the search */
+            $includedDirectories = ['Application', 'Core'];
+            /** @var array $excludedDirectories Directories and its subdirectories, which are excluded from the search */
+            $excludedDirectories = ['views', 'Exception'];
+
+
+            if ($current->isDir()) {
+                $skip = true;
+                $directoryPath = $current->getRealPath();
+                foreach ($includedDirectories as $allowedDirectory) {
+                    if ($skip == false) {
+                        break;
+                    }
+                    if (strpos($directoryPath, $allowedDirectory)) {
+                        $skip = false;
+                    }
+                }
+
+                if ($skip == false) {
+                    foreach ($excludedDirectories as $forbiddenDirectory) {
+                        if ($skip == true) {
+                            break;
+                        }
+                        if (strpos($directoryPath, $forbiddenDirectory)) {
+                            $skip = true;
+                        }
+                    }
+                }
+
+                return $skip === false;
+            } else {
+                $filePath = $current->getRealPath();
+                $skip = strpos($filePath, '/vendor/') !== false;
+
+                if (!$skip) {
+                    $fileName = $current->getFilename();
+                    $skip = strpos($fileName, '.php') == false;
+                }
+
+                return $skip === false;
+            }
+
+    }
+    /**
+     * @return
+     */
+    public function getFilterProfessional(SplFileInfo $current, $key, $iterator)
+    {
+            /**
+             * In- and exclude directories to search in.
+             * The order is include -> exclude. So you can include a directory, which automatically  includes all
+             * subdirectories and then exclude certain included subdirectories
+             */
+            /** @var array $includedDirectories Directories and its subdirectories, which are included in the search */
+            $includedDirectories = ['Application', 'Core'];
+            /** @var array $excludedDirectories Directories and its subdirectories, which are excluded from the search */
+            $excludedDirectories = ['views', 'Exception'];
+
+
+            if ($current->isDir()) {
+                $skip = true;
+                $directoryPath = $current->getRealPath();
+                foreach ($includedDirectories as $allowedDirectory) {
+                    if ($skip == false) {
+                        break;
+                    }
+                    if (strpos($directoryPath, $allowedDirectory)) {
+                        $skip = false;
+                    }
+                }
+
+                if ($skip == false) {
+                    foreach ($excludedDirectories as $forbiddenDirectory) {
+                        if ($skip == true) {
+                            break;
+                        }
+                        if (strpos($directoryPath, $forbiddenDirectory)) {
+                            $skip = true;
+                        }
+                    }
+                }
+
+                return $skip === false;
+            } else {
+                $fileName = $current->getFilename();
+                $skip = strpos($fileName, '.php') == false;
+
+                return $skip === false;
+            }
+
     }
 }
