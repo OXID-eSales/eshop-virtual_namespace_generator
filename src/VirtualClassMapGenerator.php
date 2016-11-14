@@ -82,28 +82,38 @@ class VirtualClassMapGenerator
      */
     public function generate($sourcePath, $generatedFileName, $edition)
     {
+
+        $excludedClasses = [
+            '\OxidEsales\EshopCommunity\Application\Controller\Admin\ShopCountries', // Excluded, as this file cntains a namespace, but no class
+        ];
         $tabs = '    ';
         /** Collect classes, that define namespaces */
-        $iterator = $this->getDirectoryIterator($sourcePath, $edition);
-        $classes = $this->getNameSpacedClasses($iterator);
-        sort($classes);
+        if (is_dir($sourcePath)) {
+            $iterator = $this->getDirectoryIterator($sourcePath, $edition);
+            $classes = $this->getNameSpacedClasses($iterator);
+            sort($classes);
 
-        $overridableMap = '';
-        foreach ($classes as $class) {
-            $classInVirtualNamespace = ltrim(str_replace('Eshop' . $edition, 'Eshop', $class), '\\');
-            $overridableMap .= "$tabs$tabs$tabs'$classInVirtualNamespace' => $class::class," . PHP_EOL;
+            $overridableMap = '';
+            foreach ($classes as $class) {
+                if (!in_array($class, $excludedClasses)) {
+                    $classInVirtualNamespace = ltrim(str_replace('Eshop' . $edition, 'Eshop', $class), '\\');
+                    $overridableMap .= "$tabs$tabs$tabs'$classInVirtualNamespace' => $class::class," . PHP_EOL;
+                }
+            }
+
+            $license = file_get_contents(__DIR__ . "/../templates/license/$edition.php");
+            $template = file_get_contents(__DIR__ . '/../templates/VirtualNamespaceTemplate.php');
+
+            $content = str_replace('/* ADD_OVERRIDABLE_MAP_HERE */', $overridableMap, $template);
+            $content = str_replace('/* ADD_LICENSE_HERE */', $license, $content);
+            $content = str_replace('/* ADD_EDITION_HERE */', $edition, $content);
+
+            if (!file_put_contents($generatedFileName, $content)) {
+                throw new \Exception('Could not write content to file ' . $generatedFileName);
+            };
+        } else {
+            echo 'Warning: source directory ' . $sourcePath . ' does not exists' . PHP_EOL;
         }
-
-        $license = file_get_contents(__DIR__ . "/../templates/license/$edition.php");
-        $template = file_get_contents(__DIR__ . '/../templates/VirtualNamespaceTemplate.php');
-
-        $content = str_replace('/* ADD_OVERRIDABLE_MAP_HERE */', $overridableMap, $template);
-        $content = str_replace('/* ADD_LICENSE_HERE */', $license, $content);
-        $content = str_replace('/* ADD_EDITION_HERE */', $edition, $content);
-
-        if (!file_put_contents($generatedFileName, $content)) {
-            throw new \Exception('Could not write content to file ' . $generatedFileName);
-        };
     }
 
     /**
