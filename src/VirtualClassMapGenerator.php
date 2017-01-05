@@ -55,7 +55,7 @@ class VirtualClassMapGenerator
     {
 
         $excludedClasses = [
-            '\OxidEsales\EshopCommunity\Application\Controller\Admin\ShopCountries', // Excluded, as this file cntains a namespace, but no class
+            '\OxidEsales\EshopCommunity\Application\Controller\Admin\ShopCountries', // Excluded, as this file contains a namespace, but no class
         ];
         $tabs = '    ';
         /** Collect classes, that define namespaces */
@@ -161,7 +161,10 @@ class VirtualClassMapGenerator
         /**
          * In- and exclude directories to search in.
          * The order is include -> exclude. So you can include a directory, which automatically  includes all
-         * subdirectories and then exclude certain included subdirectories
+         * subdirectories and then exclude certain included subdirectories.
+         *
+         * NOTE: exceptions aren't working at the moment with the virtual namespaces (throwing them is the problem).
+         *       Use the OxidEsales\EshopCommunity namespace instead!
          */
         /** @var array $includedDirectories Directories and its subdirectories, which are included in the search */
         $includedDirectories = ['Application', 'Core'];
@@ -220,11 +223,12 @@ class VirtualClassMapGenerator
         /**
          * In- and exclude directories to search in.
          * The order is include -> exclude. So you can include a directory, which automatically  includes all
-         * subdirectories and then exclude certain included subdirectories
+         * subdirectories and then exclude certain included subdirectories.
+         *
+         * NOTE: exceptions aren't working at the moment with the virtual namespaces (throwing them is the problem).
+         *       Use the OxidEsales\EshopCommunity namespace instead!
          */
-        /** @var array $includedDirectories Directories and its subdirectories, which are included in the search */
         $includedDirectories = ['Application', 'Core'];
-        /** @var array $excludedDirectories Directories and its subdirectories, which are excluded from the search */
         $excludedDirectories = ['views', 'Exception'];
 
 
