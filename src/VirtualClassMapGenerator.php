@@ -1,6 +1,6 @@
 <?php
 /**
- * This file is part of OXID eShop Community Edition.
+ * This file is part of OXID eSales eShop Virtual Namespace ClassMap Generator
  *
  * OXID eShop Community Edition is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -16,8 +16,7 @@
  * along with OXID eShop Community Edition.  If not, see <http://www.gnu.org/licenses/>.
  *
  * @link          http://www.oxid-esales.com
- * @copyright (C) OXID eSales AG 2003-2016
- * @version       OXID eShop CE
+ * @copyright (C) OXID eSales AG 2003-2017
  */
 class VirtualClassMapGenerator
 {
