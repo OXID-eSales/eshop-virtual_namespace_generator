@@ -19,12 +19,60 @@
  * @copyright (C) OXID eSales AG 2003-2017
  */
 
-namespace OxidEsales\VirtualNamespaceGenerator\Integration;
+require_once dirname(dirname(__DIR__)) . DIRECTORY_SEPARATOR . 'src' . DIRECTORY_SEPARATOR . 'VirtualClassMapGenerator.php';
 
 /**
  * Tests class VirtualClassMapGenerator
  */
 class VirtualClassMapGeneratorTest extends \PHPUnit_Framework_TestCase
 {
+    /**
+     * @covers \VirtualClassMapGenerator::getNameSpacedClasses
+     */
+    public function testgetNameSpacedClassesDoesNotExcludeExceptionsEE()
+    {
+        $expectedException = '\OxidEsales\EshopEnterprise\Core\Exception\AccessRightException';
+        $sourcePath = dirname(dirname(dirname(dirname(dirname(__DIR__))))) . DIRECTORY_SEPARATOR . 'vendor/oxid-esales/oxideshop-ee';
+        $edition = 'Enterprise';
 
+        $virtualClassMapGenerator = new \VirtualClassMapGenerator();
+        $iterator = $virtualClassMapGenerator->getDirectoryIterator($sourcePath, $edition);
+        $classes = $virtualClassMapGenerator->getNameSpacedClasses($iterator);
+
+        $this->assertNotFalse(array_search($expectedException, $classes));
+    }
+
+    /**
+     * @covers \VirtualClassMapGenerator::getNameSpacedClasses
+     */
+    public function testgetNameSpacedClassesDoesNotExcludeExceptionsPE()
+    {
+        /** ATM there are no exceptions in the PE Edition, so we must take one from test_data  */
+        $expectedException = '\OxidEsales\EshopProfessional\Tests\Integration\DummyException';
+        $sourcePath = __DIR__ . DIRECTORY_SEPARATOR . 'test_data';
+        $edition = 'Professional';
+
+        $virtualClassMapGenerator = new \VirtualClassMapGenerator();
+        $iterator = $virtualClassMapGenerator->getDirectoryIterator($sourcePath, $edition);
+        $classes = $virtualClassMapGenerator->getNameSpacedClasses($iterator);
+
+        $this->assertNotFalse(array_search($expectedException, $classes));
+    }
+
+    /**
+     * @covers \VirtualClassMapGenerator::getNameSpacedClasses
+     */
+    public function testgetNameSpacedClassesDoesNotExcludeExceptionsCE()
+    {
+
+        $expectedException = '\OxidEsales\EshopCommunity\Core\Exception\StandardException';
+        $sourcePath = dirname(dirname(dirname(dirname(dirname(__DIR__))))) . DIRECTORY_SEPARATOR . 'source/';
+        $edition = 'Community';
+
+        $virtualClassMapGenerator = new \VirtualClassMapGenerator();
+        $iterator = $virtualClassMapGenerator->getDirectoryIterator($sourcePath, $edition);
+        $classes = $virtualClassMapGenerator->getNameSpacedClasses($iterator);
+
+        $this->assertNotFalse(array_search($expectedException, $classes));
+    }
 }

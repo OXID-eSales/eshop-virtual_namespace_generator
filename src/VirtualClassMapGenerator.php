@@ -95,7 +95,7 @@ class VirtualClassMapGenerator
      *
      * @return array
      */
-    protected function getNameSpacedClasses(RecursiveIteratorIterator $iterator)
+    public function getNameSpacedClasses(RecursiveIteratorIterator $iterator)
     {
         $namespaceClasses = [];
         while ($iterator->valid()) {
@@ -125,7 +125,7 @@ class VirtualClassMapGenerator
      *
      * @return RecursiveIteratorIterator|SplFileInfo
      */
-    protected function getDirectoryIterator($sourcePath, $edition)
+    public function getDirectoryIterator($sourcePath, $edition)
     {
         $allowedEditions = ['Community', 'Professional', 'Enterprise'];
         if (!in_array($edition, $allowedEditions)) {
@@ -168,7 +168,7 @@ class VirtualClassMapGenerator
         /** @var array $includedDirectories Directories and its subdirectories, which are included in the search */
         $includedDirectories = ['Application', 'Core'];
         /** @var array $excludedDirectories Directories and its subdirectories, which are excluded from the search */
-        $excludedDirectories = ['views', 'Exception'];
+        $excludedDirectories = ['views'];
 
 
         if ($current->isDir()) {
@@ -228,7 +228,7 @@ class VirtualClassMapGenerator
          *       Use the OxidEsales\EshopCommunity namespace instead!
          */
         $includedDirectories = ['Application', 'Core'];
-        $excludedDirectories = ['views', 'Exception'];
+        $excludedDirectories = ['views'];
 
 
         if ($current->isDir()) {
