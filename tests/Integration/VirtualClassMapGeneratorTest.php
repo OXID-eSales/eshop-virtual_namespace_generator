@@ -24,8 +24,22 @@ require_once dirname(dirname(__DIR__)) . DIRECTORY_SEPARATOR . 'src' . DIRECTORY
 /**
  * Tests class VirtualClassMapGenerator
  */
-class VirtualClassMapGeneratorTest extends \PHPUnit_Framework_TestCase
+class VirtualClassMapGeneratorTest extends \OxidEsales\TestingLibrary\UnitTestCase
 {
+
+    /**
+     * @inheritdoc
+     *
+     * Tests should run on OXID eShop Enterprise Edition
+     */
+    public function setUp()
+    {
+        parent::setUp();
+        if ($this->getTestConfig()->getShopEdition() !== 'EE') {
+            $this->markTestSkipped('Please, run these test on OXID eShop Enterprise Edition');
+        }
+    }
+
     /**
      * @covers \VirtualClassMapGenerator::getNameSpacedClasses
      */
