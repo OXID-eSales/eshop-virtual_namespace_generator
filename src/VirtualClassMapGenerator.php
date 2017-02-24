@@ -32,9 +32,9 @@ class VirtualClassMapGenerator
         $professionalSourcePath = $baseDir . '/../vendor/oxid-esales/oxideshop-pe';
         $enterpriseSourcePath = $baseDir . '/../vendor/oxid-esales/oxideshop-ee';
 
-        $communityGeneratedFile = $baseDir . '/Core/VirtualNameSpaceClassMap.php';
-        $professionalGeneratedFile = $baseDir . '/../vendor/oxid-esales/oxideshop-pe/Core/VirtualNameSpaceClassMap.php';
-        $enterpriseGeneratedFile = $baseDir . '/../vendor/oxid-esales/oxideshop-ee/Core/VirtualNameSpaceClassMap.php';
+        $communityGeneratedFile = $baseDir . '/Core/Autoload/VirtualNameSpaceClassMap.php';
+        $professionalGeneratedFile = $baseDir . '/../vendor/oxid-esales/oxideshop-pe/Core/Autoload/VirtualNameSpaceClassMap.php';
+        $enterpriseGeneratedFile = $baseDir . '/../vendor/oxid-esales/oxideshop-ee/Core/Autoload/VirtualNameSpaceClassMap.php';
 
         $this->generate($communitySourcePath, $communityGeneratedFile, 'Community');
         $this->generate($professionalSourcePath, $professionalGeneratedFile, 'Professional');
@@ -55,6 +55,8 @@ class VirtualClassMapGenerator
 
         $excludedClasses = [
             '\OxidEsales\EshopCommunity\Application\Controller\Admin\ShopCountries', // Excluded, as this file contains a namespace, but no class
+            '\OxidEsales\EshopCommunity\Core\Autoload\AliasAutoload', // Excluded autoloder
+            '\OxidEsales\EshopCommunity\Core\Autoload\ModuleAutoload', // Excluded autoloader
         ];
         $tabs = '    ';
         /** Collect classes, that define namespaces */
@@ -63,27 +65,50 @@ class VirtualClassMapGenerator
             $classes = $this->getNameSpacedClasses($iterator);
             sort($classes);
 
-            $overridableMap = '';
+            $map = '';
             foreach ($classes as $class) {
                 if (!in_array($class, $excludedClasses)) {
                     $classInVirtualNamespace = ltrim(str_replace('Eshop' . $edition, 'Eshop', $class), '\\');
-                    $overridableMap .= "$tabs$tabs$tabs'$classInVirtualNamespace' => $class::class," . PHP_EOL;
+                    $map .= "$tabs$tabs$tabs'$classInVirtualNamespace' => $class::class," . PHP_EOL;
                 }
+            }
+            if (in_array($edition,['Professional','Enterprise'])) {
+                $mapMerge = '$classMap = array_merge(parent::getClassMap(), $classMap);';
+            } else {
+                $mapMerge = '';
             }
 
             $license = file_get_contents(__DIR__ . "/../templates/license/$edition.php");
             $template = file_get_contents(__DIR__ . '/../templates/VirtualNamespaceTemplate.php');
 
-            $content = str_replace('/* ADD_OVERRIDABLE_MAP_HERE */', $overridableMap, $template);
-            $content = str_replace('/* ADD_LICENSE_HERE */', $license, $content);
-            $content = str_replace('/* ADD_EDITION_HERE */', $edition, $content);
+            $template = str_replace('/* ADD_LICENSE_HERE */', $license, $template);
+            $template = str_replace('/* ADD_EDITION_HERE */', $edition, $template);
+            $template = str_replace('/* ADD_EXTENDS_PARENT_EDITION_HERE */', $this->getClassExdends($edition), $template);
+            $template = str_replace('/* ADD_MAP_HERE */', rtrim($map), $template);
+            $template = str_replace('/* ADD_MAP_MERGE HERE */', $mapMerge, $template);
 
-            if (!file_put_contents($generatedFileName, $content)) {
+            if (!file_put_contents($generatedFileName, $template)) {
                 throw new \Exception('Could not write content to file ' . $generatedFileName);
             };
         } else {
             echo 'Warning: source directory ' . $sourcePath . ' does not exists' . PHP_EOL;
         }
+    }
+
+    /**
+     * Return the class extends part of the classmap
+     * @param $edition Current edition
+     */
+    public function getClassExdends($edition) {
+        $extendsString = '';
+        if ('Enterprise' === $edition) {
+            $extendsString = " extends \\OxidEsales\\EshopProfessional\\Core\\Autoload\\VirtualNameSpaceClassMap";
+        }
+        if ('Professional' === $edition) {
+            $extendsString = " extends \\OxidEsales\\EshopCommunity\\Core\\Autoload\\VirtualNameSpaceClassMap";
+        }
+
+        return $extendsString;
     }
 
     /**

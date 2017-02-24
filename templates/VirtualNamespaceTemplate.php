@@ -1,19 +1,15 @@
 <?php
 /* ADD_LICENSE_HERE */
 
-namespace OxidEsales\Eshop/* ADD_EDITION_HERE */\Core;
+namespace OxidEsales\Eshop/* ADD_EDITION_HERE */\Core\Autoload;
 
 /**
  * This file holds the mapping of classes from the virtual namespace to the concrete classes of each edition.
  * Each edition has its own map file. The map files will be merged like this: CE <- PE <- EE
- * So the mapping to a concrete class will be overwritten, if a class exists in a different edition.
- *
- * NOTE: exceptions aren't working at the moment with the virtual namespaces (throwing them is the problem).
- *       Use the OxidEsales\EshopCommunity namespace instead!
- *
- * @inheritdoc
+ * So the mapping to a concrete class of the OXID eShop communitiy edition will be overwritten, if this class exists the
+ * PE or EE edition.
  */
-class VirtualNameSpaceClassMap extends \OxidEsales\EshopCommunity\Core\Edition\ClassMap
+class VirtualNameSpaceClassMap/* ADD_EXTENDS_PARENT_EDITION_HERE */
 {
 
     /**
@@ -21,22 +17,14 @@ class VirtualNameSpaceClassMap extends \OxidEsales\EshopCommunity\Core\Edition\C
      *
      * @return array Map of classes in the virtual namespace to concrete classes
      */
-    public function getOverridableMap()
+    public function getClassMap()
     {
-        return [
-/* ADD_OVERRIDABLE_MAP_HERE */
+        $classMap = [
+/* ADD_MAP_HERE */
         ];
-    }
 
-    /**
-     * Returns class map, of classes which can't be extended by modules.
-     * There are no use cases for virtual namespaces in not overridable classes at the moment.
-     * This function will return always an empty array.
-     *
-     * @return array  Maps a class from the virtual namespace to a concrete class
-     */
-    public function getNotOverridableMap()
-    {
-        return [];
+        /* ADD_MAP_MERGE HERE */
+
+        return $classMap;
     }
 }
