@@ -15,7 +15,7 @@
  * You should have received a copy of the GNU General Public License
  * along with OXID eShop Community Edition.  If not, see <http://www.gnu.org/licenses/>.
  *
- * @link          http://www.oxid-esales.com
+ * @link      http://www.oxid-esales.com
  * @copyright (C) OXID eSales AG 2003-2017
  */
 class VirtualClassMapGenerator
@@ -26,15 +26,13 @@ class VirtualClassMapGenerator
      */
     public function generateAll()
     {
-        $baseDir = getShopBasePath();
+        $communitySourcePath = OX_BASE_PATH;
+        $professionalSourcePath = VENDOR_PATH . 'oxid-esales/oxideshop-pe';
+        $enterpriseSourcePath = VENDOR_PATH . 'oxid-esales/oxideshop-ee';
 
-        $communitySourcePath = $baseDir . '';
-        $professionalSourcePath = $baseDir . '/../vendor/oxid-esales/oxideshop-pe';
-        $enterpriseSourcePath = $baseDir . '/../vendor/oxid-esales/oxideshop-ee';
-
-        $communityGeneratedFile = $baseDir . '/Core/Autoload/VirtualNameSpaceClassMap.php';
-        $professionalGeneratedFile = $baseDir . '/../vendor/oxid-esales/oxideshop-pe/Core/Autoload/VirtualNameSpaceClassMap.php';
-        $enterpriseGeneratedFile = $baseDir . '/../vendor/oxid-esales/oxideshop-ee/Core/Autoload/VirtualNameSpaceClassMap.php';
+        $communityGeneratedFile = OX_BASE_PATH . 'Core/Autoload/VirtualNameSpaceClassMap.php';
+        $professionalGeneratedFile = VENDOR_PATH . 'oxid-esales/oxideshop-pe/Core/Autoload/VirtualNameSpaceClassMap.php';
+        $enterpriseGeneratedFile = VENDOR_PATH . 'oxid-esales/oxideshop-ee/Core/Autoload/VirtualNameSpaceClassMap.php';
 
         $this->generate($communitySourcePath, $communityGeneratedFile, 'Community');
         $this->generate($professionalSourcePath, $professionalGeneratedFile, 'Professional');
@@ -55,8 +53,8 @@ class VirtualClassMapGenerator
 
         $excludedClasses = [
             '\OxidEsales\EshopCommunity\Application\Controller\Admin\ShopCountries', // Excluded, as this file contains a namespace, but no class
-            '\OxidEsales\EshopCommunity\Core\Autoload\AliasAutoload', // Excluded autoloder
-            '\OxidEsales\EshopCommunity\Core\Autoload\ModuleAutoload', // Excluded autoloader
+            '\OxidEsales\EshopCommunity\Core\Autoload\AliasAutoload', // Excluded auto load
+            '\OxidEsales\EshopCommunity\Core\Autoload\ModuleAutoload', // Excluded auto load
         ];
         $tabs = '    ';
         /** Collect classes, that define namespaces */
@@ -83,7 +81,7 @@ class VirtualClassMapGenerator
 
             $template = str_replace('/* ADD_LICENSE_HERE */', $license, $template);
             $template = str_replace('/* ADD_EDITION_HERE */', $edition, $template);
-            $template = str_replace('/* ADD_EXTENDS_PARENT_EDITION_HERE */', $this->getClassExdends($edition), $template);
+            $template = str_replace('/* ADD_EXTENDS_PARENT_EDITION_HERE */', $this->getClassExtends($edition), $template);
             $template = str_replace('/* ADD_MAP_HERE */', rtrim($map), $template);
             $template = str_replace('/* ADD_MAP_MERGE HERE */', $mapMerge, $template);
 
@@ -99,7 +97,7 @@ class VirtualClassMapGenerator
      * Return the class extends part of the classmap
      * @param $edition Current edition
      */
-    public function getClassExdends($edition) {
+    public function getClassExtends($edition) {
         $extendsString = '';
         if ('Enterprise' === $edition) {
             $extendsString = " extends \\OxidEsales\\EshopProfessional\\Core\\Autoload\\VirtualNameSpaceClassMap";
@@ -184,11 +182,8 @@ class VirtualClassMapGenerator
     {
         /**
          * In- and exclude directories to search in.
-         * The order is include -> exclude. So you can include a directory, which automatically  includes all
+         * The order is include -> exclude. So you can include a directory, which automatically includes all
          * subdirectories and then exclude certain included subdirectories.
-         *
-         * NOTE: exceptions aren't working at the moment with the virtual namespaces (throwing them is the problem).
-         *       Use the OxidEsales\EshopCommunity namespace instead!
          */
         /** @var array $includedDirectories Directories and its subdirectories, which are included in the search */
         $includedDirectories = ['Application', 'Core'];
@@ -248,9 +243,6 @@ class VirtualClassMapGenerator
          * In- and exclude directories to search in.
          * The order is include -> exclude. So you can include a directory, which automatically  includes all
          * subdirectories and then exclude certain included subdirectories.
-         *
-         * NOTE: exceptions aren't working at the moment with the virtual namespaces (throwing them is the problem).
-         *       Use the OxidEsales\EshopCommunity namespace instead!
          */
         $includedDirectories = ['Application', 'Core'];
         $excludedDirectories = ['views'];
