@@ -22,3 +22,8 @@ To create or update the virtual namespace class maps, run the following command 
 ```
 vendor/bin/oe-eshop-generate_virtual_namespaces
 ```
+
+Bugs and Issues
+---------------
+
+If you experience any bugs or issues, please report them in the section **OXID eShop (all versions)** of https://bugs.oxid-esales.com.
